@@ -1,70 +1,162 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
+<title>D3 Dependency Graph</title>
 <style>
+body{
+  margin: 0;
+  padding: 0;
+}
+rect {
+  fill: none;
+  pointer-events: all;
+}
 
 .node {
-  stroke: #fff;
-  stroke-width: 1.5px;
+  fill: #000;
+  cursor: pointer;
+}
+
+text {
+  text-rendering: geometricPrecision;
 }
 
 .link {
-  stroke: #999;
-  stroke-opacity: .6;
+  stroke: #ccc;
+}
+
+.node text {
+  pointer-events: none;
+  font: 10px sans-serif;
 }
 
 </style>
 <body>
 <script src="bower_components/d3/d3.js"></script>
 <script>
-
-var width = 960,
-    height = 500;
+var width = window.innerWidth - 20,
+    height = window.innerHeight - 20;
 
 var color = d3.scale.category20();
 
 var force = d3.layout.force()
-    .charge(-120)
-    .linkDistance(30)
-    .size([width, height]);
+    .size([width, height])
+    .nodes([{platform: 'npm', name: 'node-sass', version: 'latest', color: 0}]) // initialize with a single node
+    .linkDistance(60)
+    .charge(-150)
+    .on("tick", tick);
 
 var svg = d3.select("body").append("svg")
     .attr("width", width)
     .attr("height", height);
 
-d3.json("miserables.json", function(error, graph) {
-  if (error) throw error;
+svg.append("rect")
+    .attr("width", width)
+    .attr("height", height);
 
-  force
-      .nodes(graph.nodes)
-      .links(graph.links)
-      .start();
+var nodes = force.nodes(),
+    links = force.links(),
+    node = svg.selectAll(".node"),
+    link = svg.selectAll(".link");
 
-  var link = svg.selectAll(".link")
-      .data(graph.links)
-    .enter().append("line")
-      .attr("class", "link")
-      .style("stroke-width", function(d) { return Math.sqrt(d.value); });
+restart();
 
-  var node = svg.selectAll(".node")
-      .data(graph.nodes)
-    .enter().append("circle")
+function tick() {
+  link.attr("x1", function(d) { return d.source.x; })
+      .attr("y1", function(d) { return d.source.y; })
+      .attr("x2", function(d) { return d.target.x; })
+      .attr("y2", function(d) { return d.target.y; });
+
+  d3.selectAll("circle")
+    .attr("cx", function (d) {
+        return d.x;
+    })
+    .attr("cy", function (d) {
+        return d.y;
+    });
+  d3.selectAll("text")
+    .attr("x", function (d) {
+        return d.x;
+    })
+    .attr("y", function (d) {
+        return d.y;
+    });
+
+  node.each(collide(0.5));
+}
+
+function click(d) {
+  if(d.clicked) return // Don't load the same dependencies twice
+  loadDependencies(d)
+}
+
+function loadDependencies(d) {
+  d.clicked = true
+  d3.json('https://libraries.io/api/'+d.platform+'/'+d.name+'/'+d.version+'/dependencies', function(err, data){
+    data.dependencies.forEach(function(dependency, key, myArray) {
+      dependency.color = d.color + 1
+      dependency.version = dependency.latest_stable,
+      n = nodes.push(dependency);
+
+      // link new nodes to existing element
+      links.push({source: d, target: dependency})
+    });
+    restart();
+  })
+}
+
+var padding = 1, // separation between circles
+    radius=8;
+function collide(alpha) {
+  var quadtree = d3.geom.quadtree(nodes);
+  return function(d) {
+    var rb = 2*radius + padding,
+        nx1 = d.x - rb,
+        nx2 = d.x + rb,
+        ny1 = d.y - rb,
+        ny2 = d.y + rb;
+    quadtree.visit(function(quad, x1, y1, x2, y2) {
+      if (quad.point && (quad.point !== d)) {
+        var x = d.x - quad.point.x,
+            y = d.y - quad.point.y,
+            l = Math.sqrt(x * x + y * y);
+          if (l < rb) {
+          l = (l - rb) / l * alpha;
+          d.x -= x *= l;
+          d.y -= y *= l;
+          quad.point.x += x;
+          quad.point.y += y;
+        }
+      }
+      return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+    });
+  };
+}
+
+function restart() {
+  link = link.data(links);
+
+  link.enter().insert("line", ".node")
+      .attr("class", "link");
+
+  node = node.data(nodes);
+
+  var g =  node.enter().append("g")
       .attr("class", "node")
-      .attr("r", 5)
-      .style("fill", function(d) { return color(d.group); })
       .call(force.drag);
 
-  node.append("title")
-      .text(function(d) { return d.name; });
+  g.append("circle")
+    .attr("r", 6)
+    .on("click", click)
+    .style("fill", function (d) {
+      return color(d.color);
+    })
 
-  force.on("tick", function() {
-    link.attr("x1", function(d) { return d.source.x; })
-        .attr("y1", function(d) { return d.source.y; })
-        .attr("x2", function(d) { return d.target.x; })
-        .attr("y2", function(d) { return d.target.y; });
+  g.append("text")
+        .attr("dx", 10)
+        .attr("dy", ".35em")
+        .text(function(d) { return d.name })
 
-    node.attr("cx", function(d) { return d.x; })
-        .attr("cy", function(d) { return d.y; });
-  });
-});
+  force.start();
+}
 
 </script>
