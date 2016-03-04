@@ -1,7 +1,6 @@
 {
   "name": "d3-dependencies",
   "dependencies": {
-    "jquery": "^2.2.1",
     "d3": "^3.5.16"
   }
 }
