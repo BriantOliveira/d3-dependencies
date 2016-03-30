@@ -58,7 +58,7 @@ var nodes = force.nodes(),
     node = svg.selectAll(".node"),
     link = svg.selectAll(".link");
 
-restart();
+loadDependencies(nodes[0])
 
 function tick() {
   link.attr("x1", function(d) { return d.source.x; })
